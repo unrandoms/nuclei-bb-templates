@@ -1,0 +1,67 @@
+id: idor-uuid-swap
+
+info:
+  name: IDOR via UUID Parameter Swap
+  author: chipo
+  severity: high
+  description: |
+    Tests whether UUID-based resource identifiers are properly access-controlled.
+    Sends two requests: one to a known-valid UUID endpoint, extracts any UUID from
+    the response body (e.g. a related resource), then fetches that second UUID
+    with the original session. A 200 response with distinct body content indicates
+    the application relies on UUID obscurity rather than authorization checks.
+  reference:
+    - https://cwe.mitre.org/data/definitions/639.html
+    - https://portswigger.net/web-security/access-control/idor
+  metadata:
+    false-positive: |
+      Public APIs that expose non-sensitive UUID-keyed resources will trigger this.
+      Validate by checking whether the accessed resource belongs to a different user
+      account — look for account identifiers (userId, ownerId, email) in the body.
+    max-request: 2
+  tags: idor,bac,uuid,api,owasp-a01
+
+http:
+  - raw:
+      - |
+        GET /api/v1/resources/{{uuid}} HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer {{token}}
+        Accept: application/json
+        Connection: close
+
+      - |
+        GET /api/v1/resources/{{extracted_uuid}} HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer {{token}}
+        Accept: application/json
+        Connection: close
+
+    payloads:
+      uuid:
+        - "{{uuid}}"
+      token:
+        - "{{randstr}}"
+
+    extractors:
+      - type: regex
+        name: extracted_uuid
+        part: body
+        group: 1
+        internal: true
+        regex:
+          - '"(?:id|uuid|resourceId|object_id)"\s*:\s*"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"'
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: dsl
+        dsl:
+          - "status_code_2 == 200"
+          - "extracted_uuid != \"\""
+          - "body_2 != body_1"
+          - "contains(body_2, \"id\")"
+        condition: and

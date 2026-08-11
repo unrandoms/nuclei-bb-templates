@@ -1,0 +1,55 @@
+id: idor-param-pollution
+
+info:
+  name: IDOR via HTTP Parameter Pollution
+  author: chipo
+  severity: medium
+  description: |
+    Tests for IDOR exploitable through HTTP parameter pollution. Duplicates a user-scoped
+    parameter (userId, account_id, uid) with a different value. Some parsers take the
+    last occurrence, others the first; backend authorization logic may check a different
+    position than the application logic. A 200 response containing a different account's
+    data confirms the issue.
+  reference:
+    - https://cwe.mitre.org/data/definitions/639.html
+    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/07-Input_Validation_Testing/04-Testing_for_HTTP_Parameter_Pollution
+  metadata:
+    false-positive: |
+      Applications that ignore duplicate parameters and serve the original account data
+      will not trigger a confirmed match. Verify the response body belongs to a different
+      user before reporting.
+    max-request: 3
+  tags: idor,hpp,param-pollution,owasp-a01,bac
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/v1/profile?userId=1&userId=2"
+      - "{{BaseURL}}/api/account?account_id=1&account_id=2"
+      - "{{BaseURL}}/api/user?uid=1&uid=2"
+
+    headers:
+      Authorization: "Bearer {{randstr}}"
+      Accept: "application/json"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - '"id"'
+          - '"userId"'
+          - '"account_id"'
+        condition: or
+
+      - type: dsl
+        dsl:
+          - "len(body) > 50"
+          - "!contains(body, \"error\")"
+          - "!contains(body, \"forbidden\")"
+          - "!contains(body, \"unauthorized\")"
+        condition: and

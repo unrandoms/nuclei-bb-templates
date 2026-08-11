@@ -1,0 +1,63 @@
+id: idor-numeric-id-comparison
+
+info:
+  name: IDOR via Numeric ID Comparison
+  author: chipo
+  severity: high
+  description: |
+    Detects potential IDOR by comparing API responses for sequential numeric IDs.
+    Makes two requests to adjacent resource IDs using the same session token. If both
+    return HTTP 200 and the bodies differ but both contain an "id" field, an IDOR
+    condition is likely present — the caller can access a resource they do not own.
+  reference:
+    - https://cwe.mitre.org/data/definitions/639.html
+    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/05-Authorization_Testing/04-Testing_for_Insecure_Direct_Object_References
+  metadata:
+    false-positive: |
+      Will fire if the application intentionally exposes public resource listings with
+      sequential IDs. Confirm by checking whether the second response contains user-specific
+      fields (email, phone, address) that belong to a different account.
+    max-request: 2
+  tags: idor,bac,api,owasp-a01,broken-access-control
+
+variables:
+  token: "{{randstr}}"
+
+http:
+  - raw:
+      - |
+        GET /api/v1/users/{{rand_int(1000, 9999)}} HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer {{token}}
+        Accept: application/json
+        Connection: close
+
+      - |
+        GET /api/v1/users/{{int(id_1 + 1)}} HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer {{token}}
+        Accept: application/json
+        Connection: close
+
+    extractors:
+      - type: regex
+        name: id_1
+        part: body
+        group: 1
+        internal: true
+        regex:
+          - '"id"\s*:\s*([0-9]+)'
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: dsl
+        dsl:
+          - "status_code_2 == 200"
+          - "body_2 != body_1"
+          - "contains(body_2, \"id\")"
+          - "len(body_2) > 20"
+        condition: and
