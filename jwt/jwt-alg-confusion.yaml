@@ -1,0 +1,75 @@
+id: jwt-alg-confusion
+
+info:
+  name: JWT Algorithm Confusion (RS256 to HS256)
+  author: chipo
+  severity: critical
+  description: |
+    Tests for algorithm confusion attacks where a server configured to verify RS256
+    (asymmetric) tokens is fooled into accepting an HS256 (symmetric) token signed
+    with the server's RSA public key as the HMAC secret. If the library accepts either
+    algorithm without enforcing the expected one, an attacker who knows the public key
+    (often exposed at /jwks.json or /.well-known/jwks.json) can forge arbitrary tokens.
+    This template checks common JWKS discovery endpoints and tests whether the server
+    will authenticate a crafted HS256 token.
+  reference:
+    - https://cwe.mitre.org/data/definitions/327.html
+    - https://portswigger.net/web-security/jwt/algorithm-confusion
+    - https://auth0.com/blog/critical-vulnerabilities-in-json-web-token-libraries/
+  metadata:
+    false-positive: |
+      Low on the JWKS discovery step (public endpoint exposure is expected for RS256
+      systems). The algorithm confusion confirmation step requires follow-on manual
+      testing with the actual public key as the HMAC secret.
+    max-request: 4
+  tags: jwt,alg-confusion,rs256,hs256,owasp-a02,crypto
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/.well-known/jwks.json"
+      - "{{BaseURL}}/jwks.json"
+      - "{{BaseURL}}/api/auth/jwks"
+      - "{{BaseURL}}/oauth2/jwks"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - '"kty"'
+          - '"n"'
+          - '"e"'
+        condition: and
+
+      - type: word
+        part: body
+        words:
+          - '"RS256"'
+          - '"RS384"'
+          - '"RS512"'
+        condition: or
+
+      - type: dsl
+        dsl:
+          - "contains(header, \"application/json\")"
+        condition: and
+
+    extractors:
+      - type: regex
+        name: jwks_kid
+        part: body
+        group: 1
+        regex:
+          - '"kid"\s*:\s*"([^"]+)"'
+
+      - type: regex
+        name: jwks_n
+        part: body
+        group: 1
+        regex:
+          - '"n"\s*:\s*"([A-Za-z0-9_-]+)"'
