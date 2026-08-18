@@ -1,0 +1,93 @@
+id: auth-bypass-jwt-missing
+
+info:
+  name: Auth Bypass via Missing or Empty JWT
+  author: chipo
+  severity: high
+  description: |
+    Tests whether authenticated endpoints remain accessible when the JWT token is
+    absent, empty, malformed, or replaced with a null value. Sends requests with
+    no Authorization header, an empty Bearer token, the string "null", "undefined",
+    and a structurally valid but semantically empty JWT. Applications that perform
+    token presence checks at a middleware layer separate from the actual verification
+    layer are susceptible when the middleware is bypassed or misconfigured.
+  reference:
+    - https://cwe.mitre.org/data/definitions/306.html
+    - https://cwe.mitre.org/data/definitions/287.html
+    - https://owasp.org/www-project-top-ten/2021/A07_2021-Identification_and_Authentication_Failures
+  metadata:
+    false-positive: |
+      Endpoints that are intentionally public will return 200 with no auth. Always
+      confirm that the matched endpoint returns user-specific data (not just a
+      generic 200 landing page) before treating it as a finding.
+    max-request: 6
+  tags: auth,bypass,jwt,missing-auth,owasp-a07
+
+http:
+  - raw:
+      - |
+        GET /api/v1/me HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+        Connection: close
+
+      - |
+        GET /api/v1/me HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer
+        Accept: application/json
+        Connection: close
+
+      - |
+        GET /api/v1/me HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer null
+        Accept: application/json
+        Connection: close
+
+      - |
+        GET /api/v1/me HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer undefined
+        Accept: application/json
+        Connection: close
+
+      - |
+        GET /api/v1/me HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer .
+        Accept: application/json
+        Connection: close
+
+      - |
+        GET /api/v1/me HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: null
+        Accept: application/json
+        Connection: close
+
+    stop-at-first-match: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - '"id"'
+          - '"email"'
+          - '"user"'
+          - '"sub"'
+          - '"username"'
+        condition: or
+
+      - type: dsl
+        dsl:
+          - "len(body) > 20"
+          - "!contains(body, \"login\")"
+          - "!contains(body, \"authenticate\")"
+          - "!contains(body, \"sign in\")"
+        condition: and

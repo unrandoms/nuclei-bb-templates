@@ -1,0 +1,106 @@
+id: waf-fingerprint-headers
+
+info:
+  name: WAF Vendor Fingerprinting via Response Headers
+  author: chipo
+  severity: info
+  description: |
+    Identifies the WAF vendor protecting the target by analyzing response headers,
+    error page content, and cookie names returned on a baseline and a blocked request.
+    Detects Cloudflare, Akamai, AWS WAF, Imperva/Incapsula, F5 BIG-IP ASM, Barracuda,
+    Sucuri, and Fastly. Knowing the WAF vendor informs bypass technique selection.
+  reference:
+    - https://github.com/EnableSecurity/wafw00f
+    - https://cwe.mitre.org/data/definitions/200.html
+  metadata:
+    false-positive: |
+      None expected. Header fingerprinting is passive detection and does not modify
+      requests. Results are informational and feed into bypass template selection.
+    max-request: 2
+  tags: waf,fingerprint,detection,recon,info
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+      - "{{BaseURL}}/?q=<script>alert(1)</script>"
+
+    matchers-condition: or
+    matchers:
+      - type: word
+        part: header
+        name: cloudflare
+        words:
+          - "cf-ray"
+          - "cf-cache-status"
+          - "__cfduid"
+          - "cloudflare"
+        condition: or
+
+      - type: word
+        part: header
+        name: akamai
+        words:
+          - "X-Check-Cacheable"
+          - "X-Akamai-Request-ID"
+          - "AkamaiGHost"
+          - "x-akamai-transformed"
+        condition: or
+
+      - type: word
+        part: header
+        name: imperva
+        words:
+          - "X-Iinfo"
+          - "incap_ses"
+          - "visid_incap"
+          - "Incapsula"
+        condition: or
+
+      - type: word
+        part: header
+        name: aws-waf
+        words:
+          - "x-amzn-requestid"
+          - "x-amz-cf-id"
+          - "x-amzn-trace-id"
+        condition: or
+
+      - type: word
+        part: header
+        name: f5-bigip
+        words:
+          - "X-Cnection"
+          - "BIGipServer"
+          - "TS"
+        condition: or
+
+      - type: word
+        part: body
+        name: sucuri
+        words:
+          - "Sucuri WebSite Firewall"
+          - "sucuri.net"
+          - "Access Denied - Sucuri"
+        condition: or
+
+      - type: word
+        part: body
+        name: cloudflare-block
+        words:
+          - "Cloudflare Ray ID"
+          - "DDoS protection by Cloudflare"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: header
+        name: cf-ray
+        regex:
+          - "cf-ray: ([A-Za-z0-9-]+)"
+
+      - type: regex
+        part: header
+        name: server-header
+        regex:
+          - "(?i)server: ([^\r\n]+)"

